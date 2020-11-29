@@ -16,7 +16,8 @@ case class PrintfOp(
   clockTransition: ClockTransitionGetter,
   condition:       IntExpressionResult,
   scheduler:       Scheduler,
-  addWallTime:     Boolean)
+  addWallTime:     Boolean,
+  covWriter: Option[CoverageWriter] = None)
     extends Assigner {
 
   private val formatString = string.escape
@@ -32,7 +33,12 @@ case class PrintfOp(
           throw TreadleException(s"In printf got unknown result in arguments to printf ${string.toString}")
       }
       val instantiatedString = executeVerilogPrint(currentArgValues)
-      print(instantiatedString)
+      if (covWriter.nonEmpty && covWriter.get.isCoverageString(instantiatedString)) {
+        covWriter.get.write(instantiatedString)
+      }
+      else {
+        print(instantiatedString)
+      }
     }
 
     () => Unit

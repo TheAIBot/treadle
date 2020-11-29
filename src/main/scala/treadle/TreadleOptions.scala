@@ -384,6 +384,19 @@ case class DataStorePlugInAnnotation(
     extends NoTargetAnnotation
     with TreadleOption
 
+/**
+  * Tells treadle to write a coverage file during simulation
+  */
+case object WriteCoverageAnnotation extends NoTargetAnnotation with TreadleOption with HasShellOptions {
+  val options: Seq[ShellOption[_]] = Seq(
+    new ShellOption[Unit](
+      longOption = "tr-write-cov",
+      toAnnotationSeq = _ => Seq(WriteCoverageAnnotation),
+      helpText = "writes scope coverage to a file, filename will be based on top-name"
+    )
+  )
+}
+
 /** Constructs this as a registered library that will be auto-detected by
   * projects who have a dependency on Treadle
   */
@@ -410,7 +423,8 @@ class TreadleLibrary extends RegisteredLibrary {
     TreadleRocketBlackBoxes,
     PrefixPrintfWithWallTime,
     TreadleFirrtlString,
-    TreadleFirrtlFile
+    TreadleFirrtlFile,
+    WriteCoverageAnnotation
   ).flatMap(_.options)
 }
 

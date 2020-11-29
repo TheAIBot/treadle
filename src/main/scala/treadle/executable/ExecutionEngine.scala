@@ -613,6 +613,11 @@ object ExecutionEngine {
 
     val scheduler = new Scheduler(symbolTable)
 
+    val shouldWriteCoverage = annotationSeq.exists { case WriteCoverageAnnotation => true; case _ => false }
+    var covFilename: Option[String] = None
+    if (shouldWriteCoverage) {
+      covFilename = Some(stageOptions.getBuildFileName(circuit.main, Some(".treadle.fir.cov")))
+    }
     val compiler = new ExpressionCompiler(
       symbolTable,
       dataStore,
@@ -620,7 +625,8 @@ object ExecutionEngine {
       validIfIsRandom,
       prefixPrintfWithTime,
       blackBoxFactories,
-      plusArgs
+      plusArgs,
+      covFilename
     )
 
     timer("Build Compiled Expressions") {

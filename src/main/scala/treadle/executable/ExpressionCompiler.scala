@@ -10,6 +10,32 @@ import treadle.blackboxes.PlusArg
 import treadle.utils.FindModule
 
 import scala.collection.mutable
+import java.io.PrintWriter
+import scala.collection.mutable.HashSet
+
+object CoverageString {
+  def isCoverageString(str: String): Boolean = {
+    str.startsWith("Cov: ")
+  }
+}
+
+class CoverageWriter(covFilename: String) {
+  private val covWriter = new PrintWriter(covFilename)
+  private val alreadyPrintedCov = HashSet[String]()
+
+  def write(str: String): Unit = {
+    if (!alreadyPrintedCov(str)) {
+      alreadyPrintedCov += str
+
+      covWriter.write(str)
+      covWriter.flush()
+    }
+  }
+
+  def isCoverageString(str: String): Boolean = {
+    CoverageString.isCoverageString(str)
+  }
+}
 
 class ExpressionCompiler(
   val symbolTable:      SymbolTable,
@@ -18,8 +44,14 @@ class ExpressionCompiler(
   validIfIsRandom:      Boolean,
   prefixPrintfWithTime: Boolean,
   blackBoxFactories:    Seq[ScalaBlackBoxFactory],
-  plusArgs:             Seq[PlusArg])
+  plusArgs:             Seq[PlusArg],
+  covFilename:          Option[String] = None)
     extends logger.LazyLogging {
+      
+  var covWriter: Option[CoverageWriter] = None
+  if (covFilename.nonEmpty) {
+    covWriter = Some(new CoverageWriter(covFilename.get))
+  }
 
   case class ExternalInputParams(instance: ScalaBlackBox, portName: String)
 
@@ -897,43 +929,48 @@ class ExpressionCompiler(
         }
 
       case printf @ Print(info, stringLiteral, argExpressions, clockExpression, enableExpression) =>
-        symbolTable.printToPrintInfo.get(printf) match {
-          case Some(printInfo) =>
-            val intExpression = processExpression(enableExpression) match {
-              case i: IntExpressionResult  => i
-              case l: LongExpressionResult => LongToInt(l.apply _)
-              case b: BigExpressionResult  => ToInt(b.apply _)
-              case _ =>
-                throw TreadleException(s"Error: printf $printf has unknown condition type")
-            }
+        if (CoverageString.isCoverageString(stringLiteral.string) && covWriter.nonEmpty ||
+            !CoverageString.isCoverageString(stringLiteral.string))
+        {
+          symbolTable.printToPrintInfo.get(printf) match {
+            case Some(printInfo) =>
+              val intExpression = processExpression(enableExpression) match {
+                case i: IntExpressionResult  => i
+                case l: LongExpressionResult => LongToInt(l.apply _)
+                case b: BigExpressionResult  => ToInt(b.apply _)
+                case _ =>
+                  throw TreadleException(s"Error: printf $printf has unknown condition type")
+              }
 
-            getDrivingClock(clockExpression) match {
-              case Some(clockSymbol) =>
-                val prevClockSymbol = symbolTable(SymbolTable.makePreviousValue(clockSymbol))
+              getDrivingClock(clockExpression) match {
+                case Some(clockSymbol) =>
+                  val prevClockSymbol = symbolTable(SymbolTable.makePreviousValue(clockSymbol))
 
-                val clockTransitionGetter = ClockTransitionGetter(clockSymbol, prevClockSymbol, dataStore)
-                val printOp = PrintfOp(
-                  printInfo.printSymbol,
-                  info,
-                  stringLiteral,
-                  argExpressions.map { expression =>
-                    processExpression(expression)
-                  },
-                  argExpressions.map { expression =>
-                    getWidth(expression)
-                  },
-                  clockTransitionGetter,
-                  intExpression,
-                  scheduler,
-                  prefixPrintfWithTime
-                )
-                addAssigner(printOp)
-              case _ =>
-                throw TreadleException(s"Error: no clock found for Print $printf")
-            }
+                  val clockTransitionGetter = ClockTransitionGetter(clockSymbol, prevClockSymbol, dataStore)
+                  val printOp = PrintfOp(
+                    printInfo.printSymbol,
+                    info,
+                    stringLiteral,
+                    argExpressions.map { expression =>
+                      processExpression(expression)
+                    },
+                    argExpressions.map { expression =>
+                      getWidth(expression)
+                    },
+                    clockTransitionGetter,
+                    intExpression,
+                    scheduler,
+                    prefixPrintfWithTime,
+                    covWriter
+                  )
+                  addAssigner(printOp)
+                case _ =>
+                  throw TreadleException(s"Error: no clock found for Print $printf")
+              }
 
-          case _ =>
-            throw TreadleException(s"Could not find symbol for Print $printf")
+            case _ =>
+              throw TreadleException(s"Could not find symbol for Print $printf")
+          }
         }
 
       case EmptyStmt =>

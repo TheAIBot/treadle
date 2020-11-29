@@ -262,3 +262,6 @@ hs_err_pid*
 /.treadle_repl_history
 /test_run_dir/
 
+.bloop/**
+.metals/**
+project/**
